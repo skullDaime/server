@@ -97,7 +97,7 @@ product.belongsTo(user);
 E- Queries
 */ 
 //=> User.All
-async function queryUsers(){
+async function queryAllUsers(){
   return await user.findAll();
 }
 
@@ -142,7 +142,7 @@ async function queryOneProductByName(paramFilter){
 }
 
 //Product.all()
-async function queryProducts(){
+async function queryAllProducts(){
   const res = await product.findAll({
     attributes: ['id', 'description', 'name', 'userId', 'category']
   })
@@ -214,11 +214,11 @@ G- Resolvers
 */
   const resolvers = {
     Query: {
-      users() { return queryUsers() },
-      resolverUsersDetail() { return queryUsersDetail()},
-      oneuser(_, args) { return queryOneUser(args.id) },
-      products() { return queryProducts() },
-      reslverOneProduct(_, args) {return queryOneProduct(args.id)},
+      oneUsersDetail() { return queryOneUsersDetail()},
+      oneUser(_, args) { return queryOneUser(args.id) },
+      oneProduct(_, args) {return queryOneProduct(args.id)},
+      allUsers() { return queryAllUsers() },
+      allProducts() { return queryAllProducts() },
       allShops() { return queryAllShops() },
     },
     Mutation: {
@@ -241,15 +241,15 @@ scalar Date
   type User {
     id: ID
     name: String
-    email: String
     nick: String
     password: String
     createdAt: Date
     updatedAt: Date
 
-    userId: Int
-    userName: String
     product: [Product]
+    order: [Order]
+    creditCard: [CreditCard]
+    email: [Email]
   }
 
   type Shop{
@@ -258,9 +258,8 @@ scalar Date
     email: String
     number: Int
 
-    userId: Int
-    userName: String
     product: [Product]
+    order: [Order]
   }
 
   type Product {
@@ -268,24 +267,30 @@ scalar Date
     name: String
     description: String
     userId : String
-    category : Int
-    userName: String
 
-    productId: Int
-    productName: String
-    productDescript: String
+    category : [Category]
+  }
+
+  type Category {
+    id: ID
+    name: String
+    img: Strign
+  }
+ 
+  type CreditCart {
+    id: Id
+    name: String
+
   }
 
   type Query {
-    resolverUsersDetail : [User]
-    users: [User]
-    oneuser(id: Int!): [User]
-    products: [Product]
-    reslverOneProduct(id: Int):[Product]
-    allShops: [Shop]
+    oneUsersDetail :[User]
+    oneUser(id: Int!):: [User]
+    oneProduct(id: Int): [Product]
+    allUsers: [User]
+    allProducts :[Product]
+    allShops: [Product]
   }
-
-
 
   input userInput {
     id: ID
