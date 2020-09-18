@@ -1,7 +1,7 @@
 /*
 A- Imports
 */
-const { ApolloServer, gql, makeRemoteExecutableSchema, CheckResultAndHandleErrors } = require('apollo-server');
+const { ApolloServer, gql } = require('apollo-server');
 const sequelize = require('sequelize');
 const { Sequelize, DataTypes, where, json, INTEGER } = require('sequelize');
 require('dotenv').config();
@@ -9,7 +9,7 @@ require('dotenv').config();
 B- Database connection
 */
 const { GraphQLSchema, GraphQLObjectType, GraphQLString, GraphQLInt, GraphQLNonNull, GraphQLList } = require('graphql')
-const dataBase = new sequelize('postgres://postgres:0000@localhost:5432/appfacil');
+const dataBase = new sequelize('postgres://postgres:0000@localhost:5432/postgres');
 dataBase.authenticate().then(() => {console.log('Banco de dados conectado!')}).catch((err)=>{console.log('Banco de dados não conectado: '+err)});
 
 /*
@@ -25,12 +25,13 @@ C- Models
       updatedAt: { type: DataTypes.DATE },
   });
 
-const creditCard =  dataBase.define('CreditCard', {
+const creditCard =  dataBase.define('creditCard', {
   id: {type: DataTypes.INTEGER, primaryKey:true},
   number: {type: DataTypes.INTEGER},
-  validateDAte: {type:DataTypes.DATE},
+  dateValidade: {type:DataTypes.DATE},
   name: {type: DataTypes.INTEGER},
   flagId: {type: DataTypes.INTEGER},
+  userId: {type: DataTypes.INTEGER},
 });
 
 const flag = dataBase.define('flag', {
@@ -40,17 +41,17 @@ const flag = dataBase.define('flag', {
 
 const order =  dataBase.define('order', {
   id: {type: DataTypes.INTEGER, primaryKey: true},
-  user: {type: DataTypes.INTEGER},
+  userId: {type: DataTypes.INTEGER},
   shopId: {type: DataTypes.INTEGER},
   adress: {type: DataTypes.INTEGER},
   status: {type: DataTypes.INTEGER},
-  product: {type: DataTypes.INTEGER},
+  productId: {type: DataTypes.INTEGER},
 });
 
 const payment = dataBase.define('payment', {
   id: {type: DataTypes.INTEGER, primaryKey:true},
   value: {type: DataTypes.FLOAT},
-  user: {type: DataTypes.INTEGER},
+  userId: {type: DataTypes.INTEGER},
   shopId: {type: DataTypes.INTEGER},
 });
 
@@ -59,7 +60,6 @@ const shop = dataBase.define('shop', {
   name: {type: DataTypes.STRING},
   email: {type: DataTypes.STRING},
   number: {type: DataTypes.INTEGER},
-  internalStruct: {type: DataTypes.INTEGER},
 });
 
 const product =  dataBase.define('product', {
@@ -67,30 +67,70 @@ const product =  dataBase.define('product', {
     name: { type: DataTypes.STRING },
     description: { type: DataTypes.STRING },
     userId : { type: DataTypes.INTEGER },
-    category : { type: DataTypes.INTEGER },
+    categoryId : { type: DataTypes.INTEGER },
     createdAt: { type: DataTypes.DATE },
     updatedAt: { type: DataTypes.DATE },
 })
 
+const address =  dataBase.define('address', {
+  id : { type: DataTypes.INTEGER, primaryKey: true },
+  type: { type: DataTypes.STRING },
+  logr: { type: DataTypes.STRING },
+  number: { type: DataTypes.STRING },
+  neighborhood : { type: DataTypes.STRING },
+  city : { type: DataTypes.STRING },
+  state : { type: DataTypes.STRING },
+  country : { type: DataTypes.STRING },
+  CEP : { type: DataTypes.STRING },
+  createdAt: { type: DataTypes.DATE },
+  updatedAt: { type: DataTypes.DATE },
+  userId: {type: DataTypes.INTEGER},
+})
+
+const intensOrder =  dataBase.define('itensOrder', {
+  id : { type: DataTypes.INTEGER, primaryKey: true },
+  orderId: { type: DataTypes.INTEGER },
+  userId: { type: DataTypes.INTEGER },
+})
+
+const email =  dataBase.define('email', {
+  id : { type: DataTypes.INTEGER, primaryKey: true },
+  userId: { type: DataTypes.INTEGER },
+  nick: { type: DataTypes.STRING },
+  host: { type: DataTypes.STRING },
+})
+
+const category = dataBase.define('category', {
+  id: { type: DataTypes.INTEGER, primaryKey: true },
+  name: { type: DataTypes.STRING },
+  img: { type: DataTypes.STRING },
+});
+
 /*
 D- Relations */
 user.hasMany(creditCard);
+user.hasMany(order/*, {through: 'intensOrder', as: 'orders', foreginKey: 'ProductId', otherKey: 'OrderId'}*/);
+user.hasMany(address);
+
+address.belongsTo(user);
+
+order.belongsTo(user)
+
 creditCard.belongsTo(user);
 
-creditCard.hasOne(flag);
-flag.belongsTo(creditCard);
-
-shop.hasMany(order);
-order.belongsTo(shop);
-
+shop.hasMany(intensOrder);
 shop.hasMany(payment);
-payment.belongsTo(shop);
-
 shop.hasMany(product);
-product.belongsTo(shop);
 
-user.hasMany(product);
-product.belongsTo(user);
+payment.belongsTo(shop);
+//payment.belongsTo(user);
+
+product.belongsTo(shop);
+product.belongsTo(category);
+
+category.hasMany(product);
+//product.belongsToMany(order, {through: 'intensOrder', as:'products', foreginKey: 'OrderId', otherKey: 'ProductId'});
+
 /* FIM*/
 /*
 
@@ -111,13 +151,64 @@ async function queryOneUser(paramFilterId){
   });
 }
 
+//query all categories
+async function queryAllCategories(){
+  return await category.findAll({
+    attributes: ['id', 'name', 'img'],
+  });
+}
+
 //=> User.Multi(name)
-async function queryOneUserByName(paramFilter){
-  var localFilter = paramFilter;
+async function queryAllUserComplete(){
   return await user.findAll({
-    where:{
-        name: localFilter
-    }  
+    include:[
+      {model: address},
+      {model: order},
+      {model: creditCard}]
+  }).then(user =>{
+    const resObj = user.map(user => {
+      return Object.assign(
+        {},
+        {
+          id:   user.id,
+          name: user.name,
+          nick: user.nick,
+          email: user.email,
+          order: user.orders.map(order =>{
+            return Object.assign({},
+              {
+                id: order.id,
+                address: order.address,
+                stauts: order.status,
+                //product: order.product,
+              });   
+          }),
+          address: user.addresses.map(address=>{
+            return Object.assign({},
+              {
+                type: address.type,
+                logr: address.logr,
+                number: address.number,
+                neighborhood: address.neighborhood,
+                city: address.city,
+                state: address.state,
+                city: address.city,
+                country: address.country,
+                CEP: address.cep,
+            });
+          }),
+          creditCard: user.creditCards.map(creditCard=>{
+            return Object.assign({},
+              {
+                id: creditCard.id,
+                number: creditCard.number,
+                name: creditCard.name,
+                dateValidade: creditCard.dateValidade,
+            });
+          }),
+      })
+    })
+    return resObj;
   });
 }
 
@@ -129,6 +220,37 @@ async function queryOneProduct(paramFilterId){
         id: localFilterId
     }  
   });
+}
+
+async function queryFilterMultiplyProduct(paramKey){
+  var localKey = paramKey;
+  return await product.findAll({
+    where:{
+      categoryId: localKey
+    },
+    include:[
+      {model: category},
+    ],
+  }).then(product=>{
+    const resObj = product.map(product => {
+      return Object.assign(
+        {},
+        {
+        id: product.id,
+        name: product.name,
+        category: product.categors.map(category=>{
+          return Object.assign(
+            {},
+            {
+              id: category.id,
+              name: category.name,
+              img: category.img,
+            })
+        }),
+    });
+  });
+  return resObj;
+});
 }
 
 //Product.Multi(name)
@@ -143,13 +265,15 @@ async function queryOneProductByName(paramFilter){
 
 //Product.all()
 async function queryAllProducts(){
-  const res = await product.findAll({
-    attributes: ['id', 'description', 'name', 'userId', 'category']
+  return await product.findAll({
+
+
+    attributes: ['id', 'description', 'name', 'userId', 'categoryId']
   })
 }
 
 //(shop + Product).all()
-async function queryUsersDetail(){
+async function queryAllShopProduct(){
   return await shop.findAll({
     include: [
       {model:product}
@@ -159,14 +283,14 @@ async function queryUsersDetail(){
       return Object.assign(
         {},
         {
-          userId:   shop.id,
-          userName: shop.name,
+          id:   shop.id,
+          name: shop.name,
           product: shop.products.map(product =>{
             return Object.assign({},
               {
-                productId: product.id,
-                productName: product.name,
-                productDescript: product.description,
+                id: product.id,
+                name: product.name,
+                description: product.description,
               })              
           })
       })
@@ -220,6 +344,12 @@ G- Resolvers
       allUsers() { return queryAllUsers() },
       allProducts() { return queryAllProducts() },
       allShops() { return queryAllShops() },
+      allUserComplete() { return queryAllUserComplete() },
+      allCategories() { return queryAllCategories() },
+
+      filterMultiplyProduct(_,args) { return queryFilterMultiplyProduct(args.key) },
+
+      allShopProduct() { return queryAllShopProduct() } ,
     },
     Mutation: {
       createUser: async (_, args ) => {
@@ -246,10 +376,10 @@ scalar Date
     createdAt: Date
     updatedAt: Date
 
-    product: [Product]
+    address: [Address]
     order: [Order]
     creditCard: [CreditCard]
-    email: [Email]
+    email: String
   }
 
   type Shop{
@@ -266,7 +396,6 @@ scalar Date
     id : ID
     name: String
     description: String
-    userId : String
 
     category : [Category]
   }
@@ -274,22 +403,54 @@ scalar Date
   type Category {
     id: ID
     name: String
-    img: Strign
+    img: String
   }
  
-  type CreditCart {
-    id: Id
+  type CreditCard {
+    id: ID
     name: String
+    dateValidade: Date
+    number: String
+  }
 
+  type Address{
+    id: ID
+    type: String
+    logr: String
+    number: String
+    neighborhood: String
+    state: String
+    city: String
+    country: String
+    CEP: String
+  }
+
+  type Email{
+    id: ID
+    userId: Int
+    nick: String
+    host: String
+  }
+
+  type Order{
+    id: ID
+    user: [User]
+    product: [Product]
+    shop: [Shop]
   }
 
   type Query {
     oneUsersDetail :[User]
-    oneUser(id: Int!):: [User]
+    oneUser(id: Int!): [User]
     oneProduct(id: Int): [Product]
+    allCategories: [Category]
     allUsers: [User]
-    allProducts :[Product]
+    allProducts: [Product]
     allShops: [Product]
+    allUserComplete: [User]
+    filterMultiplyProduct(key: Int): [Product]
+
+    allShopProduct: [Shop]
   }
 
   input userInput {
