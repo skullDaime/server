@@ -66,7 +66,7 @@ const product =  dataBase.define('product', {
     id : { type: DataTypes.INTEGER, primaryKey: true },
     name: { type: DataTypes.STRING },
     description: { type: DataTypes.STRING },
-    userId : { type: DataTypes.INTEGER },
+    shopId : { type: DataTypes.INTEGER },
     categoryId : { type: DataTypes.INTEGER },
     createdAt: { type: DataTypes.DATE },
     updatedAt: { type: DataTypes.DATE },
@@ -266,10 +266,8 @@ async function queryOneProductByName(paramFilter){
 //Product.all()
 async function queryAllProducts(){
   return await product.findAll({
-
-
-    attributes: ['id', 'description', 'name', 'userId', 'categoryId']
-  })
+    attributes: ['id', 'description', 'name', 'categoryId'],
+  });
 }
 
 //(shop + Product).all()
@@ -306,6 +304,72 @@ async function queryAllShops(){
   });
 }
 
+async function queryFilterByUserAllAddresses(param){
+  var localKey = param;
+  return await address.findAll({
+    where:{
+      userId: localKey,
+    },
+  }).then(address=>{
+    const resObj = address.map(address => {
+      return Object.assign(
+      {},
+      {
+        type: address.type,
+        logr: address.logr,
+        number: address.number,
+        neighborhood: address.neighborhood,
+        city: address.city,
+        state: address.state,
+        city: address.city,
+        country: address.country,
+        CEP: address.cep,
+      });
+    });
+    return resObj;
+  });
+}
+
+async function queryFilterByUserAllCeditCards(param){
+  var localKey= param;
+  return await creditCard.findAll({
+    where:{
+      userId: localKey,
+    },
+  }).then(creditCard=>{
+    const resObj = creditCard.map(creditCard=>{
+      return Object.assign(
+        {},
+        {
+        id: creditCard.id,
+        name: creditCard.name,
+        number: creditCard.number,
+        dateValidade: creditCard.dateValidade,
+        name: creditCard.name,
+      });
+      });
+      return resObj;
+    });
+  };
+
+  async function queryOneAddress(param){
+    const localKey = param;
+    return await address.findAll({
+      where:{
+        id: localKey,
+      },
+    });
+  }
+
+  async function queryOneCreditCard(param){
+    const localKey = param;
+    return await creditCard.findAll({
+      where:{
+        id:localKey,
+      },
+    });
+
+  }
 /* fim */
     /*F- MUTATIONS*/
       async function cUser( paramArgs){
@@ -341,6 +405,8 @@ G- Resolvers
       oneUsersDetail() { return queryOneUsersDetail()},
       oneUser(_, args) { return queryOneUser(args.id) },
       oneProduct(_, args) {return queryOneProduct(args.id)},
+      oneAddress(_, args) {return queryOneAddress(args.id)},
+      oneCreditCard(_,args) {return queryOneCreditCard(args.id)},
       allUsers() { return queryAllUsers() },
       allProducts() { return queryAllProducts() },
       allShops() { return queryAllShops() },
@@ -348,6 +414,8 @@ G- Resolvers
       allCategories() { return queryAllCategories() },
 
       filterMultiplyProduct(_,args) { return queryFilterMultiplyProduct(args.key) },
+      filterByUserAllAddresses(_,args) { return queryFilterByUserAllAddresses(args.userId) },
+      filterByUserAllCeditCards(_,args) {return queryFilterByUserAllCeditCards(args.userId)},
 
       allShopProduct() { return queryAllShopProduct() } ,
     },
@@ -388,6 +456,7 @@ scalar Date
     email: String
     number: Int
 
+    shop: [Shop]
     product: [Product]
     order: [Order]
   }
@@ -443,12 +512,17 @@ scalar Date
     oneUsersDetail :[User]
     oneUser(id: Int!): [User]
     oneProduct(id: Int): [Product]
+    oneAddress(id: Int): [Address]
+    oneCreditCard(id: Int): [CreditCard]
     allCategories: [Category]
     allUsers: [User]
     allProducts: [Product]
     allShops: [Product]
     allUserComplete: [User]
+
     filterMultiplyProduct(key: Int): [Product]
+    filterByUserAllAddresses(userId: Int): [Address]
+    filterByUserAllCeditCards(userId: Int): [CreditCard]
 
     allShopProduct: [Shop]
   }
