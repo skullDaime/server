@@ -60,6 +60,7 @@ const shop = dataBase.define('shop', {
   name: {type: DataTypes.STRING},
   email: {type: DataTypes.STRING},
   number: {type: DataTypes.INTEGER},
+  description: { type: DataTypes.STRING },
 });
 
 const product =  dataBase.define('product', {
@@ -106,11 +107,24 @@ const category = dataBase.define('category', {
   img: { type: DataTypes.STRING },
 });
 
+const cart = dataBase.define('carts', {
+  id: { type:DataTypes.INTEGER, primaryKey: true },
+  userId: { type:DataTypes.INTEGER },
+  productId:  { type:DataTypes.INTEGER },
+});
+
+const itensCarts = dataBase.define('itensCarts', {
+  iduserId: { type:DataTypes.INTEGER, primaryKey: true },
+  productId: { type:DataTypes.INTEGER },
+  userId: { type:DataTypes.INTEGER },
+});
+
 /*
 D- Relations */
 user.hasMany(creditCard);
 user.hasMany(order/*, {through: 'intensOrder', as: 'orders', foreginKey: 'ProductId', otherKey: 'OrderId'}*/);
 user.hasMany(address);
+user.hasMany(cart);
 
 address.belongsTo(user);
 
@@ -121,14 +135,21 @@ creditCard.belongsTo(user);
 shop.hasMany(intensOrder);
 shop.hasMany(payment);
 shop.hasMany(product);
+shop.hasMany(shop);
 
 payment.belongsTo(shop);
 //payment.belongsTo(user);
 
 product.belongsTo(shop);
 product.belongsTo(category);
+product.hasMany(cart, /*{through: 'itensCarts', as: 'cart', foreginKey: 'productId', otherKey: 'cartId'}*/);
 
 category.hasMany(product);
+
+cart.belongsToMany(product, {through: itensCarts, foreginKey: 'cartId', otherKey: 'productId'});
+cart.belongsTo(user);
+cart.belongsTo(shop);
+
 //product.belongsToMany(order, {through: 'intensOrder', as:'products', foreginKey: 'OrderId', otherKey: 'ProductId'});
 
 /* FIM*/
@@ -238,7 +259,7 @@ async function queryFilterMultiplyProduct(paramKey){
         {
         id: product.id,
         name: product.name,
-        category: product.categors.map(category=>{
+        category: product.categories.map(category=>{
           return Object.assign(
             {},
             {
@@ -283,6 +304,7 @@ async function queryAllShopProduct(){
         {
           id:   shop.id,
           name: shop.name,
+          description: shop.description,
           product: shop.products.map(product =>{
             return Object.assign({},
               {
@@ -300,7 +322,7 @@ async function queryAllShopProduct(){
 //
 async function queryAllShops(){
   return await shop.findAll({
-    attributes: ['id', 'name', 'email', 'number', 'internalStruct'],
+    attributes: ['id', 'name', 'email', 'number', 'internalStruct', 'description'],
   });
 }
 
@@ -352,6 +374,31 @@ async function queryFilterByUserAllCeditCards(param){
     });
   };
 
+  async function queryAllCarts(){
+    return await cart.findAll({
+      include:[{model: product},
+                {model: user},]
+    }).then(cart=>{
+    const resObj = carts.map(cart=>{
+      return Object.assign(
+        {},{
+          id: cart.id,
+          product: cart.products.map(products=>{
+            return Object.assign({},{
+              id: products.id,
+            });
+          }),
+            user: cart.users.map(users=>{
+              return Object.assign({},{
+                id: users.id,
+              });
+            }),
+          });
+        })        
+        return resObj;
+    });
+  }
+
   async function queryOneAddress(param){
     const localKey = param;
     return await address.findAll({
@@ -370,6 +417,15 @@ async function queryFilterByUserAllCeditCards(param){
     });
 
   }
+
+  async function queryOneShop(param){
+    const localKey = param;
+    return await shop.findAll({
+      where:{
+        id: localKey,
+      },
+    });
+  } 
 /* fim */
     /*F- MUTATIONS*/
       async function cUser( paramArgs){
@@ -403,19 +459,22 @@ G- Resolvers
   const resolvers = {
     Query: {
       oneUsersDetail() { return queryOneUsersDetail()},
-      oneUser(_, args) { return queryOneUser(args.id) },
-      oneProduct(_, args) {return queryOneProduct(args.id)},
-      oneAddress(_, args) {return queryOneAddress(args.id)},
-      oneCreditCard(_,args) {return queryOneCreditCard(args.id)},
+      oneUser(_, args) { return queryOneUser(args.id) }, //filtrado pelo id do usario
+      oneProduct(_, args) {return queryOneProduct(args.id)}, //filtrado pelo id do usario
+      oneAddress(_, args) {return queryOneAddress(args.id)}, //filtrado pelo id do usario
+      oneCreditCard(_,args) {return queryOneCreditCard(args.id)}, //filtrado pelo id do usario
+      oneShop(_,args) {return queryOneShop(args.id)}, //filtrado pelo id do shop
       allUsers() { return queryAllUsers() },
       allProducts() { return queryAllProducts() },
       allShops() { return queryAllShops() },
       allUserComplete() { return queryAllUserComplete() },
       allCategories() { return queryAllCategories() },
+      allCarts() { return queryAllCarts() },
 
       filterMultiplyProduct(_,args) { return queryFilterMultiplyProduct(args.key) },
       filterByUserAllAddresses(_,args) { return queryFilterByUserAllAddresses(args.userId) },
       filterByUserAllCeditCards(_,args) {return queryFilterByUserAllCeditCards(args.userId)},
+
 
       allShopProduct() { return queryAllShopProduct() } ,
     },
@@ -455,6 +514,7 @@ scalar Date
     name: String
     email: String
     number: Int
+    description: String
 
     shop: [Shop]
     product: [Product]
@@ -508,12 +568,22 @@ scalar Date
     shop: [Shop]
   }
 
+  type Cart{
+    id: ID
+    
+    user:[User]
+    product:[Product]
+    shop: [Shop]
+  }
+
   type Query {
     oneUsersDetail :[User]
     oneUser(id: Int!): [User]
     oneProduct(id: Int): [Product]
     oneAddress(id: Int): [Address]
     oneCreditCard(id: Int): [CreditCard]
+    oneShop(id: Int):[Shop]
+    allCarts: [Cart]
     allCategories: [Category]
     allUsers: [User]
     allProducts: [Product]
