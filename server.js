@@ -3,7 +3,7 @@ A- Imports
 */
 const { ApolloServer, gql } = require('apollo-server');
 const sequelize = require('sequelize');
-const { Sequelize, DataTypes, where, json, INTEGER } = require('sequelize');
+const { Sequelize, Op, DataTypes, where, json, INTEGER } = require('sequelize');
 require('dotenv').config();
 /*
 B- Database connection
@@ -16,7 +16,7 @@ dataBase.authenticate().then(() => {console.log('Banco de dados conectado!')}).c
 C- Models
 */
   const user = dataBase.define('user', {
-      id: { type: DataTypes.INTEGER, primaryKey: true },
+      id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
       name: { type: DataTypes.STRING },
       nick: { type: DataTypes.STRING },
       email: { type: DataTypes.STRING },
@@ -110,13 +110,17 @@ const category = dataBase.define('category', {
 const cart = dataBase.define('carts', {
   id: { type:DataTypes.INTEGER, primaryKey: true },
   userId: { type:DataTypes.INTEGER },
-  productId:  { type:DataTypes.INTEGER },
+  shopId:  { type:DataTypes.INTEGER },
+  createdAt: { type:DataTypes.DATE },
+  updatedAt: { type:DataTypes.DATE  },
 });
 
-const itensCarts = dataBase.define('itensCarts', {
-  iduserId: { type:DataTypes.INTEGER, primaryKey: true },
+const objcart = dataBase.define('objcart', {
+  id: { type:DataTypes.INTEGER, primaryKey: true },
   productId: { type:DataTypes.INTEGER },
-  userId: { type:DataTypes.INTEGER },
+  cartId: { type:DataTypes.INTEGER },
+  updatedAt: { type:DataTypes.DATE },
+  updatedAt: { type:DataTypes.DATE },
 });
 
 /*
@@ -124,7 +128,7 @@ D- Relations */
 user.hasMany(creditCard);
 user.hasMany(order/*, {through: 'intensOrder', as: 'orders', foreginKey: 'ProductId', otherKey: 'OrderId'}*/);
 user.hasMany(address);
-user.hasMany(cart);
+//user.belongsToMany(cart, {through:objcart, foreginKey:'productId', otherKey:'cartId'});
 
 address.belongsTo(user);
 
@@ -135,22 +139,19 @@ creditCard.belongsTo(user);
 shop.hasMany(intensOrder);
 shop.hasMany(payment);
 shop.hasMany(product);
-shop.hasMany(shop);
 
 payment.belongsTo(shop);
-//payment.belongsTo(user);
 
 product.belongsTo(shop);
 product.belongsTo(category);
-product.hasMany(cart, /*{through: 'itensCarts', as: 'cart', foreginKey: 'productId', otherKey: 'cartId'}*/);
+product.belongsToMany(cart, {through:objcart, foreginKey:'productId', otherKey:'cartId'});
+
 
 category.hasMany(product);
 
-cart.belongsToMany(product, {through: itensCarts, foreginKey: 'cartId', otherKey: 'productId'});
-cart.belongsTo(user);
-cart.belongsTo(shop);
+intensOrder.belongsTo(product);
+cart.belongsToMany(product, {through:objcart, foreginKey:'cartId', otherKey:'productId'});
 
-//product.belongsToMany(order, {through: 'intensOrder', as:'products', foreginKey: 'OrderId', otherKey: 'ProductId'});
 
 /* FIM*/
 /*
@@ -247,7 +248,7 @@ async function queryFilterMultiplyProduct(paramKey){
   var localKey = paramKey;
   return await product.findAll({
     where:{
-      categoryId: localKey
+      id: localKey
     },
     include:[
       {model: category},
@@ -337,6 +338,7 @@ async function queryFilterByUserAllAddresses(param){
       return Object.assign(
       {},
       {
+        id: address.id,
         type: address.type,
         logr: address.logr,
         number: address.number,
@@ -374,30 +376,41 @@ async function queryFilterByUserAllCeditCards(param){
     });
   };
 
-  async function queryAllCarts(){
+  async function queryAllCarts(param){
+    var userKey = param.userId;
+    var shopKey = param.shopId;
     return await cart.findAll({
-      include:[{model: product},
-                {model: user},]
-    }).then(cart=>{
-    const resObj = carts.map(cart=>{
-      return Object.assign(
-        {},{
+      where:{
+        userId: userKey,
+        shopId: shopKey,
+      },
+      include:[
+        //{model: user},
+        {model: product,}
+      ]
+      }).then(cart=>{
+        const resObj = cart.map(cart => {
+        return Object.assign(
+          {},
+          {
           id: cart.id,
-          product: cart.products.map(products=>{
-            return Object.assign({},{
-              id: products.id,
+          user: cart.userId,
+          shop: cart.shopId,
+          product: cart.products.map(product=>{
+            return Object.assign(
+              {},
+              {
+              id: product.id,
+              name: product.name,
+              description: product.description,
             });
           }),
-            user: cart.users.map(users=>{
-              return Object.assign({},{
-                id: users.id,
-              });
-            }),
-          });
-        })        
-        return resObj;
+        })
+      });
+      return resObj;
     });
   }
+
 
   async function queryOneAddress(param){
     const localKey = param;
@@ -426,6 +439,15 @@ async function queryFilterByUserAllCeditCards(param){
       },
     });
   } 
+
+  async function queryFilterMultiplyProductKey(param){
+    var localKey = param;
+    return await product.findAll({
+      where:{
+        name: {[Op.like]: "%"+localKey+"%"},
+      },
+    });
+  }
 /* fim */
     /*F- MUTATIONS*/
       async function cUser( paramArgs){
@@ -438,6 +460,36 @@ async function queryFilterByUserAllCeditCards(param){
           email: cont.input.email,
         });
         return await queryOneUser(cont.input.id)
+      }
+
+      async function mutationCreateCart(param) {
+        var localUserId = param.input.userIdent;
+        var localShopId = param.input.shopIdent;
+        var localId = param.input.id;
+        var localProductId = param.input.productId;
+        var localCartId = param.input.cartId;
+        const returner = objcart.create({
+          id: localId,
+          productId: localProductId,
+          cartId: localCartId,
+        });
+
+        return await returner;
+      }
+
+      async function mutationUpdateUser(param){
+        localId = param.input.id;
+        localName = param.input.name;
+        localPassword= param.input.password;
+        localNick = param.input.nick;
+        localEmail  = param.input.email;
+        console.log("AQUIIIIIIIIIIIIIII: "+localNick);
+        const target = await user.findAll({where:{id:localId}});
+        target.name = localName;
+        target.password = localPassword;
+        target.nick = localNick;
+        target.email = localEmail;
+        await target.save();
       }
 
       async function createProduct(paramArgs){
@@ -461,6 +513,7 @@ G- Resolvers
       oneUsersDetail() { return queryOneUsersDetail()},
       oneUser(_, args) { return queryOneUser(args.id) }, //filtrado pelo id do usario
       oneProduct(_, args) {return queryOneProduct(args.id)}, //filtrado pelo id do usario
+      filterMultiplyProductKey(_, args) {return queryFilterMultiplyProductKey(args.key)}, //filtrado pelo id do usario
       oneAddress(_, args) {return queryOneAddress(args.id)}, //filtrado pelo id do usario
       oneCreditCard(_,args) {return queryOneCreditCard(args.id)}, //filtrado pelo id do usario
       oneShop(_,args) {return queryOneShop(args.id)}, //filtrado pelo id do shop
@@ -469,12 +522,11 @@ G- Resolvers
       allShops() { return queryAllShops() },
       allUserComplete() { return queryAllUserComplete() },
       allCategories() { return queryAllCategories() },
-      allCarts() { return queryAllCarts() },
+      allCarts(_,args) { return queryAllCarts(args) },
 
       filterMultiplyProduct(_,args) { return queryFilterMultiplyProduct(args.key) },
       filterByUserAllAddresses(_,args) { return queryFilterByUserAllAddresses(args.userId) },
       filterByUserAllCeditCards(_,args) {return queryFilterByUserAllCeditCards(args.userId)},
-
 
       allShopProduct() { return queryAllShopProduct() } ,
     },
@@ -482,13 +534,29 @@ G- Resolvers
       createUser: async (_, args ) => {
         var cont = args;
         return await cUser(cont);
+        
       },
 
       async resolverCreateProduct(_, args) { 
         var cont = args;
         console.log(cont); 
-        return await createProduct(cont); }
+        return await createProduct(cont); 
+      
+      },
+
+      updateUser: async (_, args) => {
+        var localArgs = args;
+        console.log("TESTEEEEEEEEEEEE"+localArgs);
+        return await mutationUpdateUser(localArgs);
+      },    
+      
+      createCart: async (_,args) => { 
+      var localArgs = args;
+      return await mutationCreateCart(localArgs)
     },
+    },
+
+   
 };
 /*fim */
 
@@ -571,9 +639,20 @@ scalar Date
   type Cart{
     id: ID
     
-    user:[User]
+    user: Int
     product:[Product]
-    shop: [Shop]
+    shop: Int
+  }
+
+  type Item{
+    id:ID
+    product: [Product]
+  }
+
+  type ObjCart{
+    id: ID
+    product: [Product]
+    cart: [Cart]
   }
 
   type Query {
@@ -583,7 +662,7 @@ scalar Date
     oneAddress(id: Int): [Address]
     oneCreditCard(id: Int): [CreditCard]
     oneShop(id: Int):[Shop]
-    allCarts: [Cart]
+    allCarts(userId: Int, shopId: Int): [Cart]
     allCategories: [Category]
     allUsers: [User]
     allProducts: [Product]
@@ -591,6 +670,7 @@ scalar Date
     allUserComplete: [User]
 
     filterMultiplyProduct(key: Int): [Product]
+    filterMultiplyProductKey(key: String): [Product]
     filterByUserAllAddresses(userId: Int): [Address]
     filterByUserAllCeditCards(userId: Int): [CreditCard]
 
@@ -617,9 +697,20 @@ scalar Date
     updatedAt: Date
   }
 
+  input ObjCartInput {
+    userIdent: Int
+    shopIdent: Int
+    id: ID
+    productId: Int
+    cartId: Int
+  }
+
   type Mutation {
     createUser(input: userInput): [User]
     resolverCreateProduct(input : productInput): [Product]
+    createCart(input: ObjCartInput): [ObjCart]
+    
+    updateUser(input: userInput):[User]
   }
 `;
 
